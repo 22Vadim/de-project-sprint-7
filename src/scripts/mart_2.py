@@ -14,7 +14,7 @@ from pyspark.sql.window import Window
 os.environ['HADOOP_CONF_DIR'] = '/etc/hadoop/conf'
 os.environ['YARN_CONF_DIR'] = '/etc/hadoop/conf'
 
-# Step 3 Zones slicing
+
 def zones_slicing(df_city):
     window_week = Window().partitionBy('week')
     window_month = Window().partitionBy('month')
