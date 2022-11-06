@@ -27,7 +27,7 @@ mart_1 = SparkSubmitOperator(
     application="/home/vsmirnov22/mart_1.py",
     conn_id="yarn_spark",
     application_args=[
-        "/user/vsmirnov22/data/events_geo",
+        "/user/master/data/geo/events",
         "/user/vsmirnov22/data/geo2.csv",
         "2022-05-31",
         "/user/vsmirnov22/data/analitycs/mart_1"
@@ -43,7 +43,7 @@ mart_2 = SparkSubmitOperator(
     application="/home/vsmirnov22/mart_2.py",
     conn_id="yarn_spark",
     application_args=[
-        "/user/vsmirnov22/data/events_geo",
+        "/user/master/data/geo/events",
         "/user/vsmirnov22/data/analitycs/mart_2",
         "2022-05-31"
     ],
@@ -58,7 +58,7 @@ mart_3 = SparkSubmitOperator(
     application="/home/vsmirnov22/mart_3.py",
     conn_id="yarn_spark",
     application_args=[
-        "/user/vsmirnov22/data/events_geo",
+        "/user/master/data/geo/events",
         "/user/vsmirnov22/data/analitycs/mart_1/df_local_time",
         "/user/vsmirnov22/data/analitycs/mart_3",
         "2022-05-31"
