@@ -32,7 +32,8 @@ def zones_slicing(df_city):
                                .withColumn('month_subscription',F.sum(F.when(df_city.event_type == 'subscription',1).otherwise(0)).over(window_month))
                                .withColumn('month_user',F.sum(F.when(F.col('rn') == 1,1).otherwise(0)).over(window_month))
                                .drop('rn')
-        )
+                                 ).select('month', 'week', 'week_message', 'week_reaction', 'week_subscription'
+                                  ,'week_user', 'month_message', 'month_reaction', 'month_subscription', 'month_user').distinct()
     return df_zones_slicing
 
 def main():
