@@ -111,8 +111,8 @@ def main():
     df_city.write.parquet(destination_path + f'df_city/date={date}')
 
 
-    df_local_time = df_local_time(df_with_time)
-    df_local_time.write.parquet(destination_path + f'df_local_time/date={date}')
+    calc_user_local_time = df_local_time(df_with_time)
+    calc_user_local_time.write.parquet(destination_path + f'df_local_time/date={date}')
 
 
 if __name__ == "__main__":
