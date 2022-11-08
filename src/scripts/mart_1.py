@@ -26,11 +26,11 @@ def event_with_city(geo_events_source: str, geo_cities: str, spark: SparkSession
                                 F.col('lat'),  
                                 F.col('lon'))
 
-    geo = spark.read.csv(geo_cities, sep =';', header = True)
+    geo = spark.read.csv("/user/vsmirnov22/data/geo.csv", sep =';', header = True)
 
-    geo = geo.withColumn("lat", geo["lat"].cast("double").alias("lat")) \
-                        .withColumn("lng", geo["lng"].cast("double").alias("lng")) \
-                        .select( F.col('city') ,F.col('lat').alias('lat_2'), F.col('lng').alias('lon_2'))
+    geo = geo.withColumn('lat', F.regexp_replace('lat', ',', '.').cast('double')) \
+                     .withColumn('lng', F.regexp_replace('lng', ',', '.').cast('double')) \
+                     .select( F.col('city') ,F.col('lat').alias('lat_2'), F.col('lng').alias('lon_2'))
 
     new = event_day.crossJoin(geo)
 
