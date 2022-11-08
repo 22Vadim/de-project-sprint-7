@@ -108,11 +108,11 @@ def main():
                         .getOrCreate())
     
     df_city = event_with_city(geo_events_source, geo_cities, spark)
-    df_city.write.parquet(destination_path + f'df_city/date={date}')
+    df_city.write.parquet(destination_path + f'df_city')
 
 
     calc_user_local_time = df_local_time(df_with_time)
-    calc_user_local_time.write.parquet(destination_path + f'df_local_time/date={date}')
+    calc_user_local_time.write.parquet(destination_path + f'df_local_time')
 
 
 if __name__ == "__main__":
