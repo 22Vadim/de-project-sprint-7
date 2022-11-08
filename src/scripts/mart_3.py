@@ -23,10 +23,10 @@ def df_friends(df_city, geo_cities, df_local_time):
                            & F.col("lat").isNotNull() & 
                            (events.event_type == "message"))
 
-    geo = spark.read.csv("/user/vsmirnov22/data/geo2.csv", sep =';',header = True)
+    geo = spark.read.csv("/user/vsmirnov22/data/geo.csv", sep =';', header = True)
 
-    geo = geo.withColumn("lat", geo["lat"].cast("double").alias("lat")) \
-                     .withColumn("lng", geo["lng"].cast("double").alias("lng")) \
+    geo = geo.withColumn('lat', F.regexp_replace('lat', ',', '.').cast('double')) \
+                     .withColumn('lng', F.regexp_replace('lng', ',', '.').cast('double')) \
                      .select( F.col('city') ,F.col('lat').alias('lat_2'), F.col('lng').alias('lon_2'))
 
     new = events_day.crossJoin(geo)
