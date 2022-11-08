@@ -14,49 +14,72 @@ from pyspark.sql.window import Window
 os.environ['HADOOP_CONF_DIR'] = '/etc/hadoop/conf'
 os.environ['YARN_CONF_DIR'] = '/etc/hadoop/conf'
 
-# Step 4 Friends mart
-def df_friends(df_city, df_local_time):
 
-    window = Window().partitionBy('user').orderBy('date')
-    df_city_from = df_city.selectExpr('event.message_from as user','lat_double_fin', 'lng_double_fin', 'date')
-    df_city_to = df_city.selectExpr('event.message_to as user','lat_double_fin', 'lng_double_fin', 'date')
-    df = (df_city_from.union(df_city_to)
-                    .select(F.col('user'), 
-                            F.col('date'),
-                            F.last(F.col('lat_double_fin'),ignorenulls = True)
-                    .over(window).alias('lat_to'), F.last(F.col('lng_double_fin'), ignorenulls = True)
-                    .over(window).alias('lng_to') )
-        )
-  
-    window = Window().partitionBy('event.message_from', 'week', 'event.message_to')
-    window_rn = Window().partitionBy('event.message_from').orderBy(F.col('date').desc())
-    window_friend = Window().partitionBy('event.message_from')
+def df_friends(df_city, geo_cities, df_local_time):
 
-    df_friends = (df_city.withColumn('week', F.trunc(F.col('date'), 'week'))
-                         .withColumn('cnt', F.count('*').over(window))
-                         .withColumn('rn', F.row_number().over(window_rn))
-                         .filter(F.col('rn') <= 5)
-                         .join(df, (df.user == df_city.event.message_to) & (df.date==df_city.date), 'left')
-                         .withColumn('diff', F.acos(F.sin(F.col('lat_double_fin')) 
-                                                   * F.sin(F.col('lat_to')) 
-                                                   + F.cos(F.col('lat_double_fin'))
-                                                   * F.cos(F.col('lat_to'))
-                                                   * F.cos(F.col('lng_double_fin')-F.col('lng_to'))
-                                                   )
-                                             *F.lit(6371)
-                                     )
-                         .filter(F.col('diff') <= 1)
-                         .withColumn('friends', F.collect_list('event.message_to').over(window_friend))
-                         .join(df_local_time, 'city', 'inner')
-                         .selectExpr('event.message_from as user', 'friends', 'local_time' , 'TIME as time_UTC', 'week', 'city')
-    )
+    events = spark.read.parquet("df_city")
+
+    events_day = events.filter(F.col("lat").isNotNull() 
+                           & F.col("lat").isNotNull() & 
+                           (events.event_type == "message"))
+
+    geo = spark.read.csv("/user/vsmirnov22/data/geo2.csv", sep =';',header = True)
+
+    geo = geo.withColumn("lat", geo["lat"].cast("double").alias("lat")) \
+                     .withColumn("lng", geo["lng"].cast("double").alias("lng")) \
+                     .select( F.col('city') ,F.col('lat').alias('lat_2'), F.col('lng').alias('lon_2'))
+
+    new = events_day.crossJoin(geo)
+
+    new = new.withColumn( 'km' , 2 * 6371 * F.asin(F.sqrt(F.sin(((F.radians(F.col("lat_2"))) - (F.radians(F.col("lat")))) / 2)**2  
+                                                      + F.cos((F.radians(F.col("lat"))))*F.cos((F.radians(F.col("lat_2"))))
+                                                      *F.sin(((F.radians(F.col("lon_2"))) - (F.radians(F.col("lon"))))/2)**2)))
+
+    window = Window().partitionBy('event.message_from', "event.message_id")
+
+    new_2 = new.withColumn("min_km", F.min('km').over(window)).filter(F.col('km') == F.col('min_km')).persist()
+
+    new_3 = new_2.select('event.message_from', 'event.datetime', 'city', 'lat', 'lon').dropDuplicates()
+
+    new_4 = new_3.alias('new_4')
+
+    new_5 = new_4.select(F.col('message_from').alias('message_from_2'),
+            F.col('datetime').alias('datetime_2'),        
+            F.col('city').alias('city_2'),
+            F.col('lat').alias('lat_2'),
+            F.col('lon').alias('lon_2'))
+
+    new_6 = new_3.crossJoin(new_5)
+
+    new_7 =  new_6.filter(F.col('message_from') != F.col('message_from_2')).drop('datetime_2')
+
+    new_8 = new_7.withColumn( 'km' , 2 * 6371 * F.asin(F.sqrt(F.sin(((F.radians(F.col("lat_2"))) - (F.radians(F.col("lat")))) / 2)**2  
+                                                      + F.cos((F.radians(F.col("lat"))))*F.cos((F.radians(F.col("lat_2"))))
+                                                      *F.sin(((F.radians(F.col("lon_2"))) - (F.radians(F.col("lon"))))/2)**2)))
+
+    new_8 = new_8.dropDuplicates()
+
+    window = Window().partitionBy('message_from', "message_from_2")
+
+    new_9 = new_8.withColumn("min_km", F.min('km').over(window))
+
+    new_10 = new_9.filter(new_9.km == new_9.min_km).select(F.col('message_from').alias('user_left'),
+                                                      F.col('message_from_2').alias('user_right'),
+                                                      F.col('city').alias('zone_id'), 'km', 'datetime' ).persist()
+
+    new_11 =     new_10.filter(new_10.km <1 ) \
+            .withColumn('processed_dttm', F.current_timestamp()).join(df_local_time, 'city', 'inner')                                                                                                                                                                                          
+
+    df_friends = new_11.select('user_left', 'user_right', 'processed_dttm', 'zone_id', 'local_time')
+    
     return df_friends
 
 def main():
     df_city_path = sys.argv[1]
     df_local_time_path = sys.argv[2]
-    destination_path = sys.argv[3]
-    date = sys.argv[4]
+    geo_cities = sys.argv[3]
+    destination_path = sys.argv[4]
+    date = sys.argv[5]
 
     spark = (SparkSession.builder
                         .master('yarn')
@@ -70,9 +93,11 @@ def main():
     df_local_time = (spark.read.parquet(df_local_time_path)
                )
 
+                   
+
     df_friends = df_friends(df_city, df_local_time)
 
-    df_friends.write.parquet(destination_path + f'df_friends')
+    df_friends.write.parquet(destination_path + f'df_friends/date={date}')
 
 if __name__ == "__main__":
         main()
