@@ -72,7 +72,7 @@ def main():
 
     df_friends = df_friends(df_city, df_local_time)
 
-    df_friends.write.parquet(destination_path + f'df_friends/date={date}')
+    df_friends.write.parquet(destination_path + f'df_friends')
 
 if __name__ == "__main__":
         main()
