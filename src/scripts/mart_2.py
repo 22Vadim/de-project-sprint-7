@@ -53,7 +53,7 @@ def main():
 
     df_zones_slicing = zones_slicing(df_city)
 
-    df_zones_slicing.write.parquet(destination_path + f'zones_slicing/date={date}')
+    df_zones_slicing.write.parquet(destination_path + f'zones_slicing')
 
 if __name__ == "__main__":
         main()
