@@ -60,6 +60,7 @@ mart_3 = SparkSubmitOperator(
     application_args=[
         "/user/master/data/geo/events",
         "/user/vsmirnov22/data/analitycs/mart_1/df_local_time",
+        "/user/vsmirnov22/data/geo2.csv",
         "/user/vsmirnov22/data/analitycs/mart_3",
         "2022-05-31"
     ],
