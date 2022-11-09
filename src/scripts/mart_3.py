@@ -17,13 +17,13 @@ os.environ['YARN_CONF_DIR'] = '/etc/hadoop/conf'
 
 def df_friends(df_city, geo_cities, df_local_time):
 
-    events = spark.read.parquet("df_city")
+    events = spark.read.parquet(df_city)
 
     events_day = events.filter(F.col("lat").isNotNull() 
                            & F.col("lat").isNotNull() & 
                            (events.event_type == "message"))
 
-    geo = spark.read.csv("/user/vsmirnov22/data/geo.csv", sep =';', header = True)
+    geo = spark.read.csv(geo_cities, sep =';', header = True)
 
     geo = geo.withColumn('lat', F.regexp_replace('lat', ',', '.').cast('double')) \
                      .withColumn('lng', F.regexp_replace('lng', ',', '.').cast('double')) \
@@ -97,7 +97,7 @@ def main():
 
     df_friends = df_friends(df_city, df_local_time)
 
-    df_friends.write.parquet(destination_path + f'df_friends/date={date}')
+    df_friends.write.parquet(destination_path + f'df_friends')
 
 if __name__ == "__main__":
         main()
