@@ -1,73 +1,66 @@
 import airflow
 from datetime import timedelta
-from airflow import DAG
 from airflow.providers.apache.spark.operators.spark_submit import (
-    SparkSubmitOperator,
-)
+    SparkSubmitOperator)
 import os
 from datetime import date, datetime
+from airflow import DAG
+import pendulum
+from airflow.operators.python_operator import PythonOperator
+from datetime import datetime
+import sys, psycopg2
 
-os.environ['HADOOP_CONF_DIR'] = '/etc/hadoop/conf'
-os.environ['YARN_CONF_DIR'] = '/etc/hadoop/conf'
+os.environ["HADOOP_CONF_DIR"] = "/etc/hadoop/conf"
+os.environ["YARN_CONF_DIR"] = "/etc/hadoop/conf"
+os.environ["JAVA_HOME"] = "/usr"
+os.environ["SPARK_HOME"] = "/usr/lib/spark"
+os.environ["PYTHONPATH"] = "/usr/local/lib/python3.8"
 
-default_args = {
-    "owner": "airflow",
-    "start_date": datetime(2020, 1, 1),
-}
 
-dag_spark = DAG(
-    dag_id="datalake_etl",
-    default_args=default_args,
-    schedule_interval=None,
-)
+with DAG (
+        "DataLake_2",
+        schedule_interval='0/15 * * * *',
+        start_date=pendulum.datetime(2022, 5, 5, tz="UTC"),
+        catchup=False,
+        tags=['data'],
+        is_paused_upon_creation=False
+ 
+    ) as dag_spark:
 
-mart_1 = SparkSubmitOperator(
-    task_id="mart_1",
-    dag=dag_spark,
-    application="/home/vsmirnov22/mart_1.py",
-    conn_id="yarn_spark",
-    application_args=[
-        "/user/master/data/geo/events",
-        "/user/vsmirnov22/data/geo2.csv",
-        "2022-05-31",
-        "/user/vsmirnov22/data/analitycs/mart_1"
-    ],
-    conf={"spark.driver.maxResultSize": "20g"},
-    executor_cores=1,
-    executor_memory="1g",
-)
+    mart_1 = SparkSubmitOperator(
+        task_id="mart_1",
+        dag=dag_spark,
+        application="/user/vsmirnov22/mart_1.py",
+        conn_id="yarn_spark",
+        application_args=[
+            "/user/master/data/geo/events",
+            "/user/vsmirnov22/data/geo.csv",
+            "/user/vsmirnov22/analytics/mart_1"]
+    )
 
-mart_2 = SparkSubmitOperator(
-    task_id="mart_2",
-    dag=dag_spark,
-    application="/home/vsmirnov22/mart_2.py",
-    conn_id="yarn_spark",
-    application_args=[
-        "/user/master/data/geo/events",
-        "/user/vsmirnov22/data/analitycs/mart_2",
-        "2022-05-31"
-    ],
-    conf={"spark.driver.maxResultSize": "20g"},
-    executor_cores=1,
-    executor_memory="1g",
-)
+    mart_2 = SparkSubmitOperator(
+        task_id="mart_2",
+        dag=dag_spark,
+        application="/user/vsmirnov22/mart_2.py",
+        conn_id="yarn_spark",
+        application_args=[
+            "/user/master/data/geo/events",
+            "/user/vsmirnov22/data/geo.csv",
+            "/user/vsmirnov22/analytics/mart_2"
+        ]
+    )
 
-mart_3 = SparkSubmitOperator(
-    task_id="mart_3",
-    dag=dag_spark,
-    application="/home/vsmirnov22/mart_3.py",
-    conn_id="yarn_spark",
-    application_args=[
-        "/user/master/data/geo/events",
-        "/user/vsmirnov22/data/analitycs/mart_1/df_local_time",
-        "/user/vsmirnov22/data/geo2.csv",
-        "/user/vsmirnov22/data/analitycs/mart_3",
-        "2022-05-31"
-    ],
-    conf={"spark.driver.maxResultSize": "20g"},
-    executor_cores=1,
-    executor_memory="1g",
-)
+    mart_3 = SparkSubmitOperator(
+        task_id="mart_3",
+        dag=dag_spark,
+        application="/user/vsmirnov22/mart_3.py",
+        conn_id="yarn_spark",
+        application_args=[
+            "/user/master/data/geo/events",
+            "/user/vsmirnov22/data/geo.csv",
+            "/user/vsmirnov22/analytics/mart_3"
+        ]
+    )
 
 
 mart_1 >> mart_2 >> mart_3
