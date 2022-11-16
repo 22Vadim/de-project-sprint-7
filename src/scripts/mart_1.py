@@ -1,50 +1,55 @@
-import os
-import sys
-import datetime
-
 import findspark
+import sys 
+import os
+import datetime
 findspark.init()
 findspark.find()
+from pyspark.sql.functions import to_timestamp
 
+import pyspark
 from pyspark.sql import SparkSession, DataFrame
-from pyspark.sql import functions as F
 from pyspark.sql.window import Window
+import pyspark.sql.functions as F
+from datetime import datetime
 
 os.environ['HADOOP_CONF_DIR'] = '/etc/hadoop/conf'
 os.environ['YARN_CONF_DIR'] = '/etc/hadoop/conf'
+os.environ["JAVA_HOME"] = "/usr"
+os.environ["SPARK_HOME"] = "/usr/lib/spark"
+os.environ["PYTHONPATH"] = "/usr/local/lib/python3.8"
+
 
 def event_with_city(geo_events_source: str, geo_cities: str, spark: SparkSession) -> DataFrame:
 
     events = spark.read.parquet(geo_events_source)
 
-    events_day = events.filter(F.col("lat").isNotNull() & F.col("lon").isNotNull() & 
-                           (events.event_type == "message")).where("date < '2022-03-30'")  
+    events_day = events.filter(F.col("lat").isNotNull() & F.col("lon").isNotNull() &
+                            (events.event_type == "message")).where("date < '2022-03-30'") ############# Исправить
 
     events_day =  events_day.select(F.col('event.message_from'), 
-                               F.col('event.datetime'),
-                               F.col('event.message_id'), 
-                               F.col('date'), 
-                               F.col('lat'),  
-                               F.col('lon'))
+                                F.col('event.datetime'),
+                                F.col('event.message_id'), 
+                                F.col('date'), 
+                                F.col('lat'),  
+                                F.col('lon'))
+
 
     geo = spark.read.csv(geo_cities, sep =';', header = True)
 
     geo = geo.withColumn('lat', F.regexp_replace('lat', ',', '.').cast('double')) \
-                     .withColumn('lng', F.regexp_replace('lng', ',', '.').cast('double')) \
-                     .select( F.col('city') ,F.col('lat').alias('lat_2'), F.col('lng').alias('lon_2'))
+                        .withColumn('lng', F.regexp_replace('lng', ',', '.').cast('double')) \
+                        .select( F.col('city') ,F.col('lat').alias('lat_2'), F.col('lng').alias('lon_2'))
 
-    nnew = events_day.crossJoin(geo)
+    new = events_day.crossJoin(geo)
 
     new = new.withColumn( 'km' , 2 * 6371 * F.asin(F.sqrt(F.sin(((F.radians(F.col("lat_2"))) - (F.radians(F.col("lat")))) / 2)**2  
-                                                      + F.cos((F.radians(F.col("lat"))))*F.cos((F.radians(F.col("lat_2"))))
-                                                      *F.sin(((F.radians(F.col("lon_2"))) - (F.radians(F.col("lon"))))/2)**2)))
-
+                                                        + F.cos((F.radians(F.col("lat"))))*F.cos((F.radians(F.col("lat_2"))))
+                                                        *F.sin(((F.radians(F.col("lon_2"))) - (F.radians(F.col("lon"))))/2)**2)))
 
     window = Window().partitionBy('message_from', "message_id")
 
     new_2 = new.withColumn("min_km", F.min('km').over(window)) \
                     .select('message_from', 'datetime', 'message_id', 'date', 'city', 'lat', 'lon', 'km', 'min_km').persist()
-
 
     new_3 = new_2.filter( new_2.km == new_2.min_km).drop('min_km')
 
@@ -53,50 +58,65 @@ def event_with_city(geo_events_source: str, geo_cities: str, spark: SparkSession
     window = Window().partitionBy('message_from', "city").orderBy('date')
     new_5 = new_4.withColumn('rn', F.row_number().over(window))
 
-    new_6 =  new_5.withColumn('diff', F.col('date') - F.col('rn'))
+    new_6 =  new_5.withColumn('diff', F.col('date') - F.col('rn')).persist()
 
-    window = Window().partitionBy('message_from', "city", 'diff')
-    new_7 = new_6.withColumn('days_count', F.count('diff').over(window))
+    #кол-во городов
+    city_count_df = new_6.drop('date', 'rn').distinct().orderBy('message_from', 'diff').persist()
+    window = Window().partitionBy('message_from').orderBy('diff')
+    city_count_lag = city_count_df.withColumn('lag', F.lag('city').over(window))
+    city_count_lag_filter = city_count_lag.filter((city_count_lag.lag.isNull()) | (city_count_lag.lag != city_count_lag.city))
+    window = Window().partitionBy('message_from')
+    city_count = city_count_lag_filter.withColumn('travel_count',F.count('city').over(window))
+    df_city_count = city_count.drop('lag','diff','city').select(F.col('message_from') \
+                                                .alias('message_from_cntcity'), 'travel_count').distinct()
 
-    window = Window().partitionBy('message_from').orderBy('city')
-    new_8 = new_7.withColumn('city_count', F.dense_rank().over(window))
+    #город посещения
+    window = Window().partitionBy('message_from').orderBy('date')
+    event_city = new_6.withColumn('rn_2', F.row_number().over(window))
 
     window = Window().partitionBy('message_from')
-    new_9 = new_8.withColumn('travel_count', F.max('city_count').over(window))
+    event_city_2 = event_city.withColumn('max_rn_2', F.max('rn_2').over(window))
 
-    new_10 = new_9.withColumn( "home_city", F.when(new_9.days_count > 26 , new_9.city).otherwise('NOT'))
+    df_event_city = event_city_2.withColumn('city_event', F.when(event_city_2.max_rn_2 == event_city_2.rn_2, event_city_2.city). \
+            otherwise("NOT")).filter(F.col('city_event') != "NOT").drop('city', 'rn', 'diff', 'rn_2', 'max_rn_2').\
+            select(F.col('message_from').alias('message_from_event'), 'city_event', 'date')
 
-    dist_geo = new_8.select(F.col('message_from').alias('message_from_2'),
-                        F.col('city').alias('city_2'), 
-                        F.col('date').alias('date_2')).orderBy('message_from_2', 'date_2')
+    #список городов
+    df_travel_array = (city_count.withColumn('lst', F.col('city').alias('lst'))
+                            .groupBy('message_from')
+                            .agg( F.concat_ws(',', F.collect_list('lst').alias('b_list')).alias('travel_array'))) \
+                            .select(F.col('message_from').alias('message_from_trar'), 'travel_array')
 
-    df = (dist_geo.withColumn('lst', F.col('city_2').alias('lst'))
-                         .groupBy('message_from_2')
-                         .agg( F.concat_ws(',', F.collect_list('lst').alias('b_list')).alias('travel_array')))
+    #домашний город
+    window = Window().partitionBy('message_from', "city", 'diff') 
+    new_7 = new_6.withColumn('days_count', F.count('diff').over(window)) 
+    new_8 = new_7.withColumn("home_city", F.when(new_7.days_count > 26 , new_7.city)).filter(F.col('days_count') >26).persist()
+    df_home_city = new_8.withColumn("home", F.last('home_city', True) \
+                    .over(Window.partitionBy('message_from').orderBy('diff').rowsBetween(-sys.maxsize, 0))) \
+                    .select(F.col('message_from').alias('message_from_hc'), F.col('home').alias('home_city')).distinct()
 
-    new_11 =  new_10.join(df, new_8.message_from == df.message_from_2, how="inner") \
-                        .drop('message_from_2', 'days_count', 'city_count', 'rn').persist()
+    df_join = df_city_count.join(df_event_city, df_city_count.message_from_cntcity == df_event_city.message_from_event, how="left") \
+            .join(df_travel_array, df_city_count.message_from_cntcity == df_travel_array.message_from_trar, how="left") \
+            .join(df_home_city, df_city_count.message_from_cntcity == df_home_city.message_from_hc, how="left") \
+            .drop('message_from_trar', 'message_from_event', 'message_from_hc').persist()
 
-    window = Window().partitionBy('message_from')
-    new_12 = new_11.withColumn('max_date', F.max('date').over(window))        
-
-    new_13 = new_12.withColumn( "act_city", F.when(new_12.max_date == new_12.date, new_5.city).otherwise('NOT')) \
-                                    .drop('city', 'diff', 'max_date')
-
-
-    df_with_time =  new_13.filter(new_13.act_city != "NOT") \
-            .withColumn('TIME', F.col('date').cast('Timestamp')) \
-            .withColumn('timezone', F.concat(F.lit('Australia'), F.lit('/'),  F.col('act_city')))
-            .withColumn('local_time', F.from_utc_timestamp(F.col('TIME'), F.col('timezone'))).drop('date')
+    df_with_time = df_join.withColumn('city_true', (F.when((F.col('city_event') != 'Gold Coast') & (F.col('city_event') != 'Cranbourne')  
+                        & (F.col('city_event') != 'Newcastle')
+                        & (F.col('city_event') != 'Wollongong') & (F.col('city_event') != 'Geelong') & (F.col('city_event') != 'Townsville')
+                        & (F.col('city_event') != 'Ipswich') & (F.col('city_event') != 'Cairns') & (F.col('city_event') != 'Toowoomba')
+                        & (F.col('city_event') != 'Ballarat') & (F.col('city_event') != 'Bendigo') & (F.col('city_event') != 'Launceston')
+                        & (F.col('city_event') != 'Mackay') & (F.col('city_event') != 'Rockhampton') & (F.col('city_event') != 'Maitland')
+                        & (F.col('city_event') != 'Bunbury'), F.col('city_event')).otherwise('Brisbane'))) \
+                        .withColumn('TIME', to_timestamp(F.col('date'))) \
+                        .withColumn('timezone', F.concat(F.lit('Australia'), F.lit('/'),  F.col('city_true'))) \
+                        .withColumn('local_time', F.from_utc_timestamp(F.col('TIME'), F.col('timezone'))) \
+                        .select(F.col('message_from_cntcity').alias('user_id'), 'city_event', 'travel_count', 'travel_array',
+                            'home_city', 'TIME', 'timezone', 'local_time')
 
 
     return df_with_time
 
 
-def df_local_time(df_with_time: DataFrame) -> DataFrame:
-    local_tyme = df_with_time.select(F.col('act_city').alis('city'), 'timezone', 'local_time')
-
-    return local_tyme
 
 
 
@@ -104,22 +124,16 @@ def df_local_time(df_with_time: DataFrame) -> DataFrame:
 def main():
     geo_events_source = sys.argv[1]
     geo_cities = sys.argv[2]
-    date = sys.argv[3]
-    destination_path = sys.argv[4]
+    destination_path = sys.argv[3]
 
     spark = (SparkSession.builder
                         .master('yarn')
-                        .config('spark.driver.memory', '1g')
-                        .config('spark.driver.cores', 2)
                         .appName('sliced_by_user')
                         .getOrCreate())
     
     df_city = event_with_city(geo_events_source, geo_cities, spark)
     df_city.write.parquet(destination_path + f'df_city')
 
-
-    df_local_time = df_local_time(df_with_time)
-    df_local_time.write.parquet(destination_path + f'df_local_time')
 
 
 if __name__ == "__main__":
