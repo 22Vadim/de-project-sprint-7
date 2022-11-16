@@ -18,7 +18,7 @@ os.environ['YARN_CONF_DIR'] = '/etc/hadoop/conf'
 def zones_slicing(geo_events_source: str, geo_cities: str, spark: SparkSession) -> DataFrame:
 
     events = spark.read.parquet(geo_events_source)
-    events_day = events.filter(F.col("lat").isNotNull() & F.col("lat").isNotNull()).where("date < '2022-04-05'") ####исправить
+    events_day = events.filter(F.col("lat").isNotNull() & F.col("lat").isNotNull())
     events_day = events_day.withColumn('event_id', F.monotonically_increasing_id()) 
 
     geo = spark.read.csv(geo_cities, sep =';',header = True)
