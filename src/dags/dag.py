@@ -18,7 +18,7 @@ os.environ["PYTHONPATH"] = "/usr/local/lib/python3.8"
 
 
 with DAG (
-        "DataLake_2",
+        "DataLake",
         schedule_interval='0/15 * * * *',
         start_date=pendulum.datetime(2022, 5, 5, tz="UTC"),
         catchup=False,
