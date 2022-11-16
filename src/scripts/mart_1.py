@@ -24,7 +24,7 @@ def event_with_city(geo_events_source: str, geo_cities: str, spark: SparkSession
     events = spark.read.parquet(geo_events_source)
 
     events_day = events.filter(F.col("lat").isNotNull() & F.col("lon").isNotNull() &
-                            (events.event_type == "message")).where("date < '2022-03-30'") ############# Исправить
+                            (events.event_type == "message"))
 
     events_day =  events_day.select(F.col('event.message_from'), 
                                 F.col('event.datetime'),
