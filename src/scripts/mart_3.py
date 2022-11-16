@@ -21,7 +21,7 @@ def df_friends(geo_events_source: str, geo_cities: str, spark: SparkSession) -> 
     events = spark.read.parquet(geo_events_source)
 
     events_day = events.filter(F.col("lat").isNotNull() & F.col("lat").isNotNull() & 
-                            (events.event_type == "message")).where("date < '2022-03-05'") 
+                            (events.event_type == "message"))
 
     geo = spark.read.csv(geo_cities, sep =';',header = True)
 
