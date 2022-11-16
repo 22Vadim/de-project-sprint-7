@@ -67,8 +67,6 @@ def main():
 
     spark = (SparkSession.builder
                         .master('yarn')
-                        .config('spark.driver.memory', '1g')
-                        .config('spark.driver.cores', 2)
                         .appName('sliced_by_zones')
                         .getOrCreate())
     
