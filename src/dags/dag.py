@@ -1,14 +1,12 @@
 import airflow
-from datetime import timedelta
 from airflow.providers.apache.spark.operators.spark_submit import (
     SparkSubmitOperator)
 import os
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from airflow import DAG
 import pendulum
 from airflow.operators.python_operator import PythonOperator
-from datetime import datetime
-import sys, psycopg2
+import sys
 
 os.environ["HADOOP_CONF_DIR"] = "/etc/hadoop/conf"
 os.environ["YARN_CONF_DIR"] = "/etc/hadoop/conf"
