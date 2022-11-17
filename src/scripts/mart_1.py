@@ -58,7 +58,7 @@ def event_with_city(geo_events_source: str, geo_cities: str, spark: SparkSession
     window = Window().partitionBy('message_from', "city").orderBy('date')
     new_5 = new_4.withColumn('rn', F.row_number().over(window))
 
-    new_6 =  new_5.withColumn('diff', F.col('date') - F.col('rn')).persist()
+    new_6 =  new_5.selectExpr('*' ,'date_sub(date, rn) as diff').persist()
 
     #кол-во городов
     city_count_df = new_6.drop('date', 'rn').distinct().orderBy('message_from', 'diff').persist()
