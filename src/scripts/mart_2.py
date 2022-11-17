@@ -72,7 +72,7 @@ def main():
     
 
 
-    df_zones_slicing = zones_slicing(geo_events_source , geo_cities)
+    df_zones_slicing = zones_slicing(geo_events_source , geo_cities, spark)
 
     df_zones_slicing.write.parquet(destination_path + f'zones_slicing')
 
