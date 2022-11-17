@@ -97,7 +97,7 @@ def main():
                         .getOrCreate())
     
 
-    df_friends_d = df_friends(geo_events_source,  geo_cities)
+    df_friends_d = df_friends(geo_events_source,  geo_cities, spark)
 
     df_friends_d.write.parquet(destination_path + f'df_friends')
 
