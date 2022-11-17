@@ -28,7 +28,7 @@ with DAG (
     mart_1 = SparkSubmitOperator(
         task_id="mart_1",
         dag=dag_spark,
-        application="/user/vsmirnov22/mart_1.py",
+        application="/lessons/scripts/mart_1.py",
         conn_id="yarn_spark",
         application_args=[
             "/user/master/data/geo/events",
@@ -39,7 +39,7 @@ with DAG (
     mart_2 = SparkSubmitOperator(
         task_id="mart_2",
         dag=dag_spark,
-        application="/user/vsmirnov22/mart_2.py",
+        application="/lessons/scripts/mart_2.py",
         conn_id="yarn_spark",
         application_args=[
             "/user/master/data/geo/events",
@@ -51,7 +51,7 @@ with DAG (
     mart_3 = SparkSubmitOperator(
         task_id="mart_3",
         dag=dag_spark,
-        application="/user/vsmirnov22/mart_3.py",
+        application="/lessons/scripts/mart_3.py",
         conn_id="yarn_spark",
         application_args=[
             "/user/master/data/geo/events",
