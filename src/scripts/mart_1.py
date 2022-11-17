@@ -71,15 +71,16 @@ def event_with_city(geo_events_source: str, geo_cities: str, spark: SparkSession
                                                 .alias('message_from_cntcity'), 'travel_count').distinct()
 
     #город посещения
+    df = new_3.select('message_from', 'city', 'date', 'datetime')
     window = Window().partitionBy('message_from').orderBy('date')
-    event_city = new_6.withColumn('rn_2', F.row_number().over(window))
+    event_city = df.withColumn('rn_2', F.row_number().over(window))
 
     window = Window().partitionBy('message_from')
     event_city_2 = event_city.withColumn('max_rn_2', F.max('rn_2').over(window))
 
     df_event_city = event_city_2.withColumn('city_event', F.when(event_city_2.max_rn_2 == event_city_2.rn_2, event_city_2.city). \
-            otherwise("NOT")).filter(F.col('city_event') != "NOT").drop('city', 'rn', 'diff', 'rn_2', 'max_rn_2').\
-            select(F.col('message_from').alias('message_from_event'), 'city_event', 'date')
+        otherwise("NOT")).filter(F.col('city_event') != "NOT")\
+        .select(F.col('message_from').alias('message_from_event'), 'city_event', 'date', 'datetime')
 
     #список городов
     df_travel_array = (city_count.withColumn('lst', F.col('city').alias('lst'))
@@ -100,18 +101,18 @@ def event_with_city(geo_events_source: str, geo_cities: str, spark: SparkSession
             .join(df_home_city, df_city_count.message_from_cntcity == df_home_city.message_from_hc, how="left") \
             .drop('message_from_trar', 'message_from_event', 'message_from_hc').persist()
 
-    df_with_time = df_join.withColumn('city_true', (F.when((F.col('city_event') != 'Gold Coast') & (F.col('city_event') != 'Cranbourne')  
-                        & (F.col('city_event') != 'Newcastle')
-                        & (F.col('city_event') != 'Wollongong') & (F.col('city_event') != 'Geelong') & (F.col('city_event') != 'Townsville')
-                        & (F.col('city_event') != 'Ipswich') & (F.col('city_event') != 'Cairns') & (F.col('city_event') != 'Toowoomba')
-                        & (F.col('city_event') != 'Ballarat') & (F.col('city_event') != 'Bendigo') & (F.col('city_event') != 'Launceston')
-                        & (F.col('city_event') != 'Mackay') & (F.col('city_event') != 'Rockhampton') & (F.col('city_event') != 'Maitland')
-                        & (F.col('city_event') != 'Bunbury'), F.col('city_event')).otherwise('Brisbane'))) \
-                        .withColumn('TIME', to_timestamp(F.col('date'))) \
-                        .withColumn('timezone', F.concat(F.lit('Australia'), F.lit('/'),  F.col('city_true'))) \
-                        .withColumn('local_time', F.from_utc_timestamp(F.col('TIME'), F.col('timezone'))) \
-                        .select(F.col('message_from_cntcity').alias('user_id'), 'city_event', 'travel_count', 'travel_array',
-                            'home_city', 'TIME', 'timezone', 'local_time')
+    df_with_time = df_join.withColumn('city_true', (F.when((F.col('city_event') != 'Gold Coast') & (F.col('city_event') != 'Cranbourne')   
+                            & (F.col('city_event') != 'Newcastle') 
+                            & (F.col('city_event') != 'Wollongong') & (F.col('city_event') != 'Geelong') & (F.col('city_event') != 'Townsville') 
+                            & (F.col('city_event') != 'Ipswich') & (F.col('city_event') != 'Cairns') & (F.col('city_event') != 'Toowoomba') 
+                            & (F.col('city_event') != 'Ballarat') & (F.col('city_event') != 'Bendigo') & (F.col('city_event') != 'Launceston') 
+                            & (F.col('city_event') != 'Mackay') & (F.col('city_event') != 'Rockhampton') & (F.col('city_event') != 'Maitland') 
+                            & (F.col('city_event') != 'Bunbury'), F.col('city_event')).otherwise('Brisbane')))\
+                                .withColumn('TIME', to_timestamp(F.col('datetime')))\
+                                .withColumn('timezone', F.concat(F.lit('Australia'), F.lit('/'),  F.col('city_true')))\
+                                .withColumn('local_time', F.from_utc_timestamp(F.col('TIME'), F.col('timezone')))\
+                                .select(F.col('message_from_cntcity').alias('user_id'), F.col('city_event').alias('act_city'), 
+                                              'home_city', 'travel_count', 'travel_array', 'local_time')
 
 
     return df_with_time
