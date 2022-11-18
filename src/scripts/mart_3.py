@@ -21,7 +21,7 @@ def df_friends(geo_events_source: str, geo_cities: str, spark: SparkSession) -> 
     events = spark.read.parquet("/user/master/data/geo/events")
 
     events_day = events.filter(F.col("lat").isNotNull() & F.col("lat").isNotNull() & 
-                            (events.event_type == "message")).where("date < '2022-03-05'") ####исправить
+                            (events.event_type == "message"))
 
     geo = spark.read.csv("/user/vsmirnov22/data/geo.csv", sep =';',header = True)
 
@@ -41,10 +41,14 @@ def df_friends(geo_events_source: str, geo_cities: str, spark: SparkSession) -> 
     users = min_km.select('event', 'event.message_from', 'event.message_to', 'date', 'city', 'lat', 'lon')\
                         .filter(F.col('message_to').isNotNull()).dropDuplicates()
 
+    channels = events.filter((events.event_type == "subscription")).select(F.col("event.subscription_channel")\
+        .alias("subscription_channel") ,F.col("event.user").alias("subscription_user")).distinct()              
+
+    combine = users.join(channels, users.message_from == channels.subscription_user, 'inner').persist()
 
     #крайний город и правка городов
     window = Window().partitionBy('message_from').orderBy('date')
-    city_row_num = users.withColumn('row',F.row_number().over(window))
+    city_row_num = combine.withColumn('row',F.row_number().over(window))
 
     window = Window().partitionBy('message_from')
     city_max = city_row_num.withColumn('max',F.max('row').over(window)).persist()
@@ -59,25 +63,26 @@ def df_friends(geo_events_source: str, geo_cities: str, spark: SparkSession) -> 
                         .withColumn('TIME', to_timestamp(F.col('date'))) \
                         .withColumn('timezone', F.concat(F.lit('Australia'), F.lit('/'),  F.col('zone_id'))) \
                         .withColumn('local_time', F.from_utc_timestamp(F.col('TIME'), F.col('timezone'))) \
-                        .drop('row', 'max', 'city', 'TIME', 'date' , 'timezone')      
+                        .drop('row', 'max', 'city', 'TIME', 'date' , 'timezone', 'subscription_user', 'event')   
 
     #чистим от повторяющихся переписок
     users_city_clean_2 = users_city_clean.select(F.col('message_from').alias('message_from_2'), F.col('message_to').alias('message_to_2'))
 
-    users_1 = users_city_clean.join(users_city_clean_2, users_city_clean.message_from == users_city_clean_2.message_to_2, 'leftanti')
+    users_1 = users_city_clean.join(users_city_clean_2, users_city_clean.message_from == users_city_clean_2.message_to_2, 'leftanti').persist()
 
     #второй пользователь
     users_2_d = users_1.alias('users_2')
 
-    users_2 = users_2_d.select(F.col('event').alias('event_2'), 
-            F.col('message_from').alias('message_from_2'),
+    users_2 = users_2_d.select(F.col('message_from').alias('message_from_2'),
+            F.col('subscription_channel').alias('subscription_channel_2'),
             F.col('lat').alias('lat_2'),
             F.col('lon').alias('lon_2'))
 
     #соединяем
     crossJoin_users = users_1.crossJoin(users_2)
 
-    crossJoin_users_clean = crossJoin_users.filter((F.col('message_from') != F.col('message_from_2')))
+    crossJoin_users_clean = crossJoin_users.filter((F.col('message_from') != F.col('message_from_2')) 
+                                                    &  (F.col('subscription_channel') == F.col('subscription_channel_2')))
 
     #поиск километра
     users_km = crossJoin_users_clean.withColumn( 'km' , 2 * 6371 * F.asin(F.sqrt(F.sin(((F.radians(F.col("lat_2"))) - (F.radians(F.col("lat")))) / 2)**2  
@@ -88,8 +93,7 @@ def df_friends(geo_events_source: str, geo_cities: str, spark: SparkSession) -> 
     df_users = users_km.filter(F.col('km') < 1 ).withColumn('processed_dttm', F.current_timestamp()) \
                                     .select(F.col('message_from').alias('user_left'),
                                         F.col('message_from_2').alias('user_right'),
-                                        'processed_dttm', 'zone_id', 'local_time').dropDuplicates()         
-
+                                        'processed_dttm', 'zone_id', 'local_time').dropDuplicates()      
     return df_users
 
 def main():
