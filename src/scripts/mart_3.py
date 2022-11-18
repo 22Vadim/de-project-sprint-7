@@ -103,13 +103,11 @@ def main():
 
     spark = (SparkSession.builder
                         .master('yarn')
-                        .config('spark.driver.memory', '1g')
-                        .config('spark.driver.cores', 2)
                         .appName('sliced_by_zones')
                         .getOrCreate())
     
 
-    df_friends_d = df_friends(geo_events_source,  geo_cities)
+    df_friends_d = df_friends(geo_events_source,  geo_cities, spark)
 
     df_friends_d.write.parquet(destination_path + f'df_friends')
 
