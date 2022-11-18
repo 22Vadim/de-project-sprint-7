@@ -18,12 +18,12 @@ os.environ['YARN_CONF_DIR'] = '/etc/hadoop/conf'
 def df_friends(geo_events_source: str, geo_cities: str, spark: SparkSession) -> DataFrame:
 
     #подготовка датасетов
-    events = spark.read.parquet("/user/master/data/geo/events")
+    events = spark.read.parquet(geo_events_source)
 
     events_day = events.filter(F.col("lat").isNotNull() & F.col("lat").isNotNull() & 
                             (events.event_type == "message"))
 
-    geo = spark.read.csv("/user/vsmirnov22/data/geo.csv", sep =';',header = True)
+    geo = spark.read.csv(geo_cities, sep =';',header = True)
 
     geo = geo.withColumn('lat', F.regexp_replace('lat', ',', '.').cast('double')) \
                             .withColumn('lng', F.regexp_replace('lng', ',', '.').cast('double')) \
