@@ -65,24 +65,41 @@ def df_friends(geo_events_source: str, geo_cities: str, spark: SparkSession) -> 
                         .withColumn('local_time', F.from_utc_timestamp(F.col('TIME'), F.col('timezone'))) \
                         .drop('row', 'max', 'city', 'TIME', 'date' , 'timezone', 'subscription_user', 'event')   
 
-    #чистим от повторяющихся переписок
-    users_city_clean_2 = users_city_clean.select(F.col('message_from').alias('message_from_2'), F.col('message_to').alias('message_to_2'))
+        # добавил столбец сообщества, чтобы далее найти только тех, кто состоит в одном
+    users_city_clean_2 = users_city_clean.select(
+      F.col('message_from').alias('message_from_2'),
+      F.col('message_to').alias('message_to_2'),
+      F.col('subscription_channel').alias('subscription_channel_2'))
 
-    users_1 = users_city_clean.join(users_city_clean_2, users_city_clean.message_from == users_city_clean_2.message_to_2, 'leftanti').persist()
-
+        # все потенциальные пары, состоящие в одном сообществе
+    all_pairs = users_city_clean.crossJoin(users_city_clean_2) \
+      .filter(F.col('message_from') != F.col('message_from_2')) \
+      .filter(F.col('subscription_channel') == F.col('subscription_channel_2'))
+    
+        # все пары, которые переписывались, и их перевёрнутые версии (имитируем взаимные переписки)
+    all_communications = users_city_clean.select('message_from', 'message_to') \
+      .union(users_city_clean.select('message_to', 'message_from')) \
+      .distinct()
+    
+        # оставляем только те пары, которые не переписывались
+    strangers = all_pairs.join(all_communications,
+        (all_pairs.message_from == all_communications.message_from) &
+        (all_pairs.message_to == all_communications.message_from), "leftanti")\
+       .select(all_pairs.message_from, all_pairs.message_to, all_pairs.lat
+        , all_pairs.lon, all_pairs.zone_id, all_pairs.local_time).distinct().persist()
+    
+    
     #второй пользователь
-    users_2_d = users_1.alias('users_2')
+    users_2_d = strangers.alias('users_2')
 
     users_2 = users_2_d.select(F.col('message_from').alias('message_from_2'),
-            F.col('subscription_channel').alias('subscription_channel_2'),
             F.col('lat').alias('lat_2'),
             F.col('lon').alias('lon_2'))
 
     #соединяем
-    crossJoin_users = users_1.crossJoin(users_2)
-
-    crossJoin_users_clean = crossJoin_users.filter((F.col('message_from') != F.col('message_from_2')) 
-                                                    &  (F.col('subscription_channel') == F.col('subscription_channel_2')))
+    crossJoin_users = strangers.crossJoin(users_2)
+    
+    crossJoin_users_clean = crossJoin_users.filter((F.col('message_from') != F.col('message_from_2')))
 
     #поиск километра
     users_km = crossJoin_users_clean.withColumn( 'km' , 2 * 6371 * F.asin(F.sqrt(F.sin(((F.radians(F.col("lat_2"))) - (F.radians(F.col("lat")))) / 2)**2  
